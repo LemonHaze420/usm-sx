@@ -33,7 +33,7 @@ static bool assemble(const char* path, const char* out)
             tokens.push_back(token);
 
         if (tokens.size() >= 1) {
-            opcode_t opcode = magic_enum::enum_cast<opcode_t>(tokens[0]).value();
+            opcode_t opcode = magic_enum::enum_cast<opcode_t>(std::string("OP_").append(tokens[0])).value();
             opcode_arg_t arg_type = tokens.size() > 1 ?
                                         magic_enum::enum_cast<opcode_arg_t>(tokens[1]).value_or(OP_ARG_NULL)
                                         : OP_ARG_NULL;
