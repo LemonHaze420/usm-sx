@@ -16,15 +16,15 @@ static int get_dsize(opcode_arg_t arg_type)
         return 4;
 }
 
-static void assemble(const char* path, const char* out)
+static bool assemble(const char* path, const char* out)
 {
     std::ifstream file(path);
     std::ofstream assembled_file(out, std::ios::binary);
     std::string line;
     while (std::getline(file, line)) {
         size_t pipe = line.find('|');
-        if (pipe == std::string::npos)              return;
-        if (line.find('#') != std::string::npos)    continue;
+        if (pipe == std::string::npos || line.find('#') != std::string::npos) 
+            continue;
 
         std::istringstream iss(line.substr(pipe + 1));
         std::vector<std::string> tokens;
@@ -58,10 +58,13 @@ static void assemble(const char* path, const char* out)
             }
         }
     }
+    if (!assembled_file.good())
+        return false;
     assembled_file.close();
+    return true;
 }
 
-static void disassemble(char* path, const bool verbose)
+static bool disassemble(char* path, const bool verbose)
 {
     fs::path base = path;
     std::ifstream file(path, std::ios::binary);
@@ -87,7 +90,7 @@ static void disassemble(char* path, const bool verbose)
         file.seekg(PC, std::ios::beg);
         file.read(reinterpret_cast<char*>(&op), 2);
         if (file.eof() || op == 0)       // adding nothing? impossible.
-            break;
+            return false;
 
         opcode_t opcode = (opcode_t)(op >> 8);
         bool has_arg = (op & OP_ARGTYPE_MASK) != 0;
@@ -134,13 +137,14 @@ static void disassemble(char* path, const bool verbose)
         prev_PC = PC;
     }
     file.close();
+    return true;
 }
 
 int main(int argc, char ** argp)
 {
     if (strstr(argp[1], "-d")) 
-        disassemble(argp[2], (bool)strstr(argp[1], "v"));
+        return disassemble(argp[2], (bool)strstr(argp[1], "v"));
     else if (strstr(argp[1], "-a"))
-        assemble(argp[2], argp[3]);
+        return assemble(argp[2], argp[3]);
     return 0;
 }
