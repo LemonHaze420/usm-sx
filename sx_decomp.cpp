@@ -11,18 +11,18 @@ namespace fs = std::filesystem;
 #pragma pack(push, 1)
 struct script_executable
 {
-    char mash_hdr[0x10];
-    char name[32];
-    int sx_exe_image;
-    int sx_exe_image_size;
-    int script_objects;
-    int script_objects_by_name;
+    char mash_hdr[0x10];                    // standard mashable header
+    char name[32];                          // name of this script
+    int sx_exe_image;                       // ---- (internally used as ptr)
+    int sx_exe_image_size;                  // actual bytecode len
+    int script_objects;                     // ---- (internally used as ptr)
+    int script_objects_by_name;             
     int total_script_objects;
     int global_script_object;
-    int permanent_string_table;
-    int permanent_string_table_size;
-    int system_string_table;
-    int system_string_table_size;
+    int permanent_string_table;             // ---- (internally used as ptr)
+    int permanent_string_table_size;        // number of strings in this script
+    int system_string_table;                // ---- (internally used as ptr)
+    int system_string_table_size;           // number of ? in this script(?)
     int script_object_dummy_list;
     int script_allocated_stuff_map;
     int flags;
@@ -93,11 +93,9 @@ static bool disassemble(char* path, const bool verbose)
     fs::path base = path;
     std::ifstream file(path, std::ios::binary);
 
-
     script_executable hdr;
     auto hdr_size = sizeof script_executable;
-    file.read(reinterpret_cast<char*>(&hdr), sizeof script_executable);
-
+    file.read(reinterpret_cast<char*>(&hdr), hdr_size);
 
     // if this is a PC script, then we read 4 bytes too many
     // as it seems that the header removed the last field on PC
@@ -106,20 +104,26 @@ static bool disassemble(char* path, const bool verbose)
         hdr_size -= 4;
     }
 
-    if (verbose)
-        printf("Name: %s\n", hdr.name);
-
     int end = hdr_size + hdr.sx_exe_image_size;
+    if (verbose) {
+#       if _DEBUG
+            printf("Name: %s\n", std::string(hdr.name, 32).c_str());
+            printf("hdr.sx_exe_image_size = 0x%08X\n", hdr.sx_exe_image_size);
+            printf("hdr_size = 0x%08X\n", hdr_size);
+            printf("end = 0x%08X\n", end);
+#       endif
+    }
 
     int PC = (int)file.tellg(), prev_PC = (int)file.tellg();
     while (file.good()) {
+        if (PC + 2 >= end)
+            break;
+
         uint16_t op;
         file.seekg(PC, std::ios::beg);
         file.read(reinterpret_cast<char*>(&op), 2);
-        if (file.eof() || (int)file.tellg() >= end)       // adding nothing? impossible.
-        {
-            return false;
-        }
+        if (file.eof())
+            break;
 
         opcode_t opcode = (opcode_t)(op >> 8);
         bool has_arg = (op & OP_ARGTYPE_MASK) != 0;
@@ -156,11 +160,14 @@ static bool disassemble(char* path, const bool verbose)
         }
 
         printf("| %-10s \t%-10s \t", std::string(magic_enum::enum_name(opcode)).substr(3).c_str(), arg_type != OP_ARG_NULL ? std::string(magic_enum::enum_name(arg_type)).c_str() : "");
-        if (has_arg)
+        if (has_arg) {
             if (arg_type == OP_ARG_NUM)
                 printf("%f", *reinterpret_cast<float*>(&arg));
-            //else if (!verbose && opcode == OP_PSH && arg_type == OP_ARG_STR)
-                //printf("%s", ss_tbl[arg].c_str());
+
+            bool is_sst_var = opcode == OP_PSH && arg_type == OP_ARG_STR;
+            if (is_sst_var) {
+                // @todo: fixup with actual data using hdr
+            }
             else if (arg_type == OP_ARG_LFR || arg_type == OP_ARG_CLV) {
                 short arg1 = static_cast<short>(arg & 0xFFFF);
                 short arg2 = static_cast<short>((arg >> 16) & 0xFFFF);
@@ -168,6 +175,7 @@ static bool disassemble(char* path, const bool verbose)
             }
             else
                 printf("0x%-8X", !verbose && arg_type == OP_ARG_PCR ? PC + ((int16_t)arg) : arg);
+        }
         printf("\n");
         prev_PC = PC;
     }
