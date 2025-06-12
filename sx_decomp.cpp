@@ -8,6 +8,30 @@
 
 namespace fs = std::filesystem;
 
+#pragma pack(push, 1)
+struct script_executable
+{
+    char mash_hdr[0x10];
+    char name[32];
+    int sx_exe_image;
+    int sx_exe_image_size;
+    int script_objects;
+    int script_objects_by_name;
+    int total_script_objects;
+    int global_script_object;
+    int permanent_string_table;
+    int permanent_string_table_size;
+    int system_string_table;
+    int system_string_table_size;
+    int script_object_dummy_list;
+    int script_allocated_stuff_map;
+    int flags;
+    int info_t;
+    int field_58;
+    int field_5C;
+};
+#pragma pack(pop)
+
 static int get_dsize(opcode_arg_t arg_type)
 {
     if (arg_type == OP_ARG_WORD || arg_type == OP_ARG_PCR || arg_type == OP_ARG_SPR || arg_type == OP_ARG_POPO)
@@ -68,29 +92,37 @@ static bool disassemble(char* path, const bool verbose)
 {
     fs::path base = path;
     std::ifstream file(path, std::ios::binary);
-    std::vector<std::string> ss_tbl;
-    if (!verbose) {
-        std::ifstream sstbl(base.replace_extension(".xbsst"), std::ios::binary);
-        if (sstbl.good()) {
-            std::string line;
-            std::getline(sstbl, line);
-            if (line == "strngtbl") {
-                std::getline(sstbl, line);
-                size_t count = std::stoi(line);
-                while (count-- && std::getline(sstbl, line))
-                    ss_tbl.push_back(line);
-            }
-            sstbl.close();
-        }
+
+
+    script_executable hdr;
+    auto hdr_size = sizeof script_executable;
+    file.read(reinterpret_cast<char*>(&hdr), sizeof script_executable);
+
+
+    // if this is a PC script, then we read 4 bytes too many
+    // as it seems that the header removed the last field on PC
+    if (base.extension().compare(".PCSX") == 0) {
+        file.seekg(-4, std::ios::cur);
+        hdr_size -= 4;
     }
 
-    int PC = 0, prev_PC = 0;
+    if (verbose)
+        printf("Name: %s\n", hdr.name);
+
+    int end = hdr_size + hdr.sx_exe_image_size;
+
+    int PC = (int)file.tellg(), prev_PC = (int)file.tellg();
     while (file.good()) {
         uint16_t op;
         file.seekg(PC, std::ios::beg);
         file.read(reinterpret_cast<char*>(&op), 2);
-        if (file.eof() || op == 0)       // adding nothing? impossible.
+        
+        printf("0x%x\n", end);
+        if (file.eof() || (int)file.tellg() >= end)       // adding nothing? impossible.
+        {
+            
             return false;
+        }
 
         opcode_t opcode = (opcode_t)(op >> 8);
         bool has_arg = (op & OP_ARGTYPE_MASK) != 0;
@@ -103,9 +135,10 @@ static bool disassemble(char* path, const bool verbose)
             tmp_datasize = get_dsize(arg_type);
             file.seekg(PC + 2, std::ios::beg);
             file.read(reinterpret_cast<char*>(&arg), tmp_datasize);
+            
             if (tmp_datasize == 4 && arg_type == OP_ARG_NUM)
                 arg = ((uint16_t)arg) << 16 | (uint16_t)(arg >> 16);
-            else
+            else if (tmp_datasize != 4)
                 arg = ((int16_t)arg);
         }
         PC += 2 + tmp_datasize;
@@ -129,8 +162,13 @@ static bool disassemble(char* path, const bool verbose)
         if (has_arg)
             if (arg_type == OP_ARG_NUM)
                 printf("%f", *reinterpret_cast<float*>(&arg));
-            else if (!verbose && opcode == OP_PSH && arg_type == OP_ARG_STR)
-                printf("%s", ss_tbl[arg].c_str());
+            //else if (!verbose && opcode == OP_PSH && arg_type == OP_ARG_STR)
+                //printf("%s", ss_tbl[arg].c_str());
+            else if (arg_type == OP_ARG_LFR || arg_type == OP_ARG_CLV) {
+                short arg1 = static_cast<short>(arg & 0xFFFF);
+                short arg2 = static_cast<short>((arg >> 16) & 0xFFFF);
+                printf("0x%-04X 0x%04X", arg1, arg2);
+            }
             else
                 printf("0x%-8X", !verbose && arg_type == OP_ARG_PCR ? PC + ((int16_t)arg) : arg);
         printf("\n");

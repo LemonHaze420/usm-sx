@@ -11,7 +11,7 @@ enum opcode_t {
     OP_BRA = 3,
     OP_BSL = 4,     // Call library function    LFR
     OP_BSR = 5,     // Branch to subroutine     SFR
-    OP_BST = 6,
+    OP_BST = 6,     // Branch to sub-thread     
     OP_BTH = 7,
     OP_DEC = 8,
     OP_DIV = 9,
