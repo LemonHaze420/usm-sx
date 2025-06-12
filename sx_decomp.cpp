@@ -116,11 +116,8 @@ static bool disassemble(char* path, const bool verbose)
         uint16_t op;
         file.seekg(PC, std::ios::beg);
         file.read(reinterpret_cast<char*>(&op), 2);
-        
-        printf("0x%x\n", end);
         if (file.eof() || (int)file.tellg() >= end)       // adding nothing? impossible.
         {
-            
             return false;
         }
 
