@@ -163,11 +163,10 @@ static bool disassemble(char* path, const bool verbose)
         if (has_arg) {
             if (arg_type == OP_ARG_NUM)
                 printf("%f", *reinterpret_cast<float*>(&arg));
-
-            bool is_sst_var = opcode == OP_PSH && arg_type == OP_ARG_STR;
+            /*bool is_sst_var = opcode == OP_PSH && arg_type == OP_ARG_STR;
             if (is_sst_var) {
                 // @todo: fixup with actual data using hdr
-            }
+            }*/
             else if (arg_type == OP_ARG_LFR || arg_type == OP_ARG_CLV) {
                 short arg1 = static_cast<short>(arg & 0xFFFF);
                 short arg2 = static_cast<short>((arg >> 16) & 0xFFFF);
