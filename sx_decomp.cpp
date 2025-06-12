@@ -115,15 +115,12 @@ static bool disassemble(char* path, const bool verbose)
     }
 
     int PC = (int)file.tellg(), prev_PC = (int)file.tellg();
-    while (file.good()) {
-        if (PC + 2 >= end)
-            break;
-
+    while (file.good() && (PC + 2) < end) {
         uint16_t op;
         file.seekg(PC, std::ios::beg);
         file.read(reinterpret_cast<char*>(&op), 2);
-        if (file.eof())
-            break;
+        if (!file.good() || file.eof())
+            return false;
 
         opcode_t opcode = (opcode_t)(op >> 8);
         bool has_arg = (op & OP_ARGTYPE_MASK) != 0;
