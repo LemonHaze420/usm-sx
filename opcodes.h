@@ -1,9 +1,15 @@
 #pragma once
 
+// =============
+// OPCODES
+// =============
+
 constexpr auto OP_DSIZE_FLAG = 0x0080u;
 constexpr auto OP_ARGTYPE_MASK = 0x007Fu;
 
-// FUNCTION                 ARGUMENT_TYPES_ALLOWED
+//MNEM          OP                 ARGUMENT_TYPES_ALLOWED            [ARG0[, ARG2]]
+//BITS          16                           16                            32
+//              2                             2                            4
 enum opcode_t {
     OP_ADD = 0,
     OP_AND = 1,
@@ -120,11 +126,11 @@ const char* opcode_t_str[] = {
 };
 
 enum opcode_arg_t {
-    OP_ARG_NULL = 0,
-    OP_ARG_NUM = 1,
-    OP_ARG_NUMR = 2,
-    OP_ARG_STR = 3,
-    OP_ARG_WORD = 4,
+    OP_ARG_NULL = 0,    // no argument
+    OP_ARG_NUM = 1,     // constant numeric value (4 bytes)
+    OP_ARG_NUMR = 2,    // constant numeric value used in reverse position (4 bytes; only applies to non-commutative operations)
+    OP_ARG_STR = 3,     // constant string value (4 bytes)
+    OP_ARG_WORD = 4,    // constant integer value (2 bytes)
     OP_ARG_PCR = 5,     // PC-relative address (2 bytes)
     OP_ARG_SPR = 6,     // SP-relative address (2 bytes)
     OP_ARG_POPO = 7,    // stack contents (pop) plus offset (2 bytes)
@@ -181,3 +187,56 @@ constexpr uint32_t opcode_arg_t_shift[] = {
     2, //OP_ARG_VAR
 };
 
+// =============
+// CLASSES
+// =============
+
+
+enum classes_ {
+    _global_slc,        // default
+    num,
+    str,
+    pfx,
+    interactable_interface,
+    anim,
+    beam,
+    entity,
+    cut_scene,
+    debug_menu_entry,
+    entity_list,
+    entity_list_iterator,
+    entity_tracker,
+    glamour_cam,
+    gun,
+    item,
+    line_info,
+    mission_camera_marker,
+    mission_camera_transform_marker,
+    mission_transform_marker,
+    num_list,
+    num_list_iterator,
+    panel,
+    polytube,
+    script_controller,
+    signaller,
+    sound_inst,
+    str_list,
+    str_list_iterator,
+    switch_obj,
+    tam,
+    taunt_entry,
+    taunt_exchange,
+    taunt_exchange_list,
+    trigger,
+    vector3d,
+    position3d,
+    posfacing3d,
+    vector3d_list,
+    string_hash_,
+    critical_section,
+    district,
+};
+
+// =============
+// FUNCTIONS
+// =============

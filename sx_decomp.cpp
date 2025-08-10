@@ -98,7 +98,7 @@ static bool disassemble(char* path, const bool verbose)
     file.read(reinterpret_cast<char*>(&hdr), hdr_size);
 
     // if this is a PC script, then we read 4 bytes too many
-    // as it seems that the header removed the last field on PC
+    // as it seems that the last field was removed from the header on PC
     if (base.extension().compare(".PCSX") == 0) {
         file.seekg(-4, std::ios::cur);
         hdr_size -= 4;
@@ -167,7 +167,8 @@ static bool disassemble(char* path, const bool verbose)
             else if (arg_type == OP_ARG_LFR || arg_type == OP_ARG_CLV) {
                 short arg1 = static_cast<short>(arg & 0xFFFF);
                 short arg2 = static_cast<short>((arg >> 16) & 0xFFFF);
-                printf("0x%-04X 0x%04X", arg1, arg2);
+                classes_ tmpclass = static_cast<classes_>(arg1);
+                printf("%s 0x%04X", std::string(magic_enum::enum_name(tmpclass)).c_str(), arg2);
             }
             else
                 printf("0x%-8X", !verbose && arg_type == OP_ARG_PCR ? PC + ((int16_t)arg) : arg);
@@ -179,11 +180,19 @@ static bool disassemble(char* path, const bool verbose)
     return true;
 }
 
+bool convert_script(const char* path, const char* out_path)
+{
+
+    return true;
+}
+
 int main(int argc, char ** argp)
 {
     if (strstr(argp[1], "-d")) 
         return disassemble(argp[2], (bool)strstr(argp[1], "v"));
     else if (strstr(argp[1], "-a"))
         return assemble(argp[2], argp[3]);
+    else if (strstr(argp[1], "-c"))
+        return convert_script(argp[2], argp[3]);
     return 0;
 }
