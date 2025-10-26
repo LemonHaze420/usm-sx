@@ -8,6 +8,63 @@
 
 namespace fs = std::filesystem;
 
+std::map<uint16_t, uint16_t> ps2_pc_global_slc_funcremap = {
+        { 0x00F4, 0x5     },
+        { 0x0056, 0x4     },
+        { 0x0034, 0x4     },
+        { 0x00E2, 0x5     },
+        { 0x01B5, 0xC    },
+        { 0x0059, 0x4     },
+        { 0x0035, 0x4     },
+        { 0x0088, 0x4     },
+        { 0x010D, 0x6     },
+        { 0x0044, 0x4     },
+        { 0x011E, 0xC     },
+        { 0x0030, 0x4     },
+        { 0x01A2, 0x4     },
+        { 0x012B, 0xC     },
+        { 0x012A, 0xC     },
+        { 0x00EC, 0x7     },
+        { 0x00ED, 0x7     },
+        { 0x00DE, 0x6     },
+        { 0x0087, 0x4     },
+        { 0x00EF, 0x6     },
+        { 0x01A7, 0xE     },
+        { 0x0096, 0x4     },
+        { 0x009F, 0x4     },
+        { 0x00A2, 0x4     },
+        { 0x007B, 0x4     },
+        { 0x0023, 0x4     },
+        { 0x0153, 0xC     },
+        { 0x0051, 0x4     },
+        { 0x0019, 0x4     },
+        { 0x001B, 0x4     },
+        { 0x0122, 0xC     },
+        { 0x0014, 0x4     },
+        { 0x00D3, 0x4     },
+        { 0x00A9, 0x4     },
+        { 0x0105, 0x6     },
+        { 0x00F2, 0x5     },
+        { 0x010A, 0x6     },
+        { 0x00E1, 0x5     },
+        { 0x018F, 0xD     },
+        { 0x00FF, 0x4     },
+        { 0x0151, 0xC     },
+        { 0x0041, 0x4     },
+        { 0x0017, 0x4     },
+        { 0x0075, 0x4     },
+        { 0x0064, 0x4     },
+        { 0x005B, 0x4     },
+        { 0x004D, 0x4     },
+        { 0x0038, 0x4     },
+        { 0x0018, 0x4     },
+        { 0x0031, 0x4     },
+        { 0x01A5, 0xE     },
+        { 0x01B3, 0xC    },
+        { 0x00E3, 0x5     },
+        { 0x00CE, 0x5     },
+};
+
 #pragma pack(push, 1)
 struct script_executable
 {
@@ -104,6 +161,7 @@ static bool disassemble(char* path, const bool verbose)
         hdr_size -= 4;
     }
 
+    const bool isPS2Version = hdr_size == 0x70;
     int end = hdr_size + hdr.sx_exe_image_size;
     if (verbose) {
 #       if _DEBUG
@@ -111,6 +169,7 @@ static bool disassemble(char* path, const bool verbose)
             printf("hdr.sx_exe_image_size = 0x%08X\n", hdr.sx_exe_image_size);
             printf("hdr_size = 0x%08X\n", hdr_size);
             printf("end = 0x%08X\n", end);
+            printf("isPS2Version = %d\n", (int)isPS2Version);
 #       endif
     }
 
@@ -180,9 +239,101 @@ static bool disassemble(char* path, const bool verbose)
     return true;
 }
 
+struct decoded_insn_t {
+    int offset;            
+    opcode_t opcode;       
+    opcode_arg_t arg_type; 
+    int arg;               
+    int size;              
+};
+
+bool decode_insn(std::ifstream& file, int offset, const int code_end, decoded_insn_t& out) {
+    if (offset + 2 > code_end) return false;
+
+    uint16_t op_raw;
+    file.seekg(offset, std::ios::beg);
+    file.read(reinterpret_cast<char*>(&op_raw), 2);
+    if (!file.good()) return false;
+
+    opcode_t opcode = (opcode_t)(op_raw >> 8);
+    opcode_arg_t arg_type = (opcode_arg_t)(op_raw & OP_ARGTYPE_MASK);
+    bool has_arg = (op_raw & OP_ARGTYPE_MASK) != 0;
+    bool dsize_flag = (op_raw & OP_DSIZE_FLAG) != 0;
+
+    int size = 2 + (dsize_flag ? 2 : 0);
+    int arg = 0;
+    int tmp_datasize = 0;
+
+    if (has_arg && arg_type != OP_ARG_NULL) {
+        tmp_datasize = get_dsize(arg_type);
+        file.seekg(offset + size, std::ios::beg);
+        file.read(reinterpret_cast<char*>(&arg), tmp_datasize);
+
+        if (tmp_datasize == 4 && arg_type == OP_ARG_NUM)
+            arg = ((uint16_t)arg) << 16 | (uint16_t)(arg >> 16);
+        else if (tmp_datasize != 4)
+            arg = ((int16_t)arg);
+
+        size += tmp_datasize;
+    }
+
+    out = {
+        .offset = offset,
+        .opcode = opcode,
+        .arg_type = arg_type,
+        .arg = arg,
+        .size = size
+    };
+    return true;
+}
+
 bool convert_script(const char* path, const char* out_path)
 {
+    std::ifstream file(path, std::ios::binary);
+    std::ofstream out_f(out_path, std::ios::binary | std::ios::trunc);
+    if (!file.good() || !out_f.good())
+        return false;
 
+    std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+
+    script_executable* hdr = reinterpret_cast<script_executable*>(buffer.data());
+    int hdr_size = sizeof(script_executable);
+
+    fs::path base = path;
+    buffer.erase(buffer.begin() + 0x6C, buffer.begin() + 0x70);
+    hdr_size -= 4;
+
+    int end = hdr_size + hdr->sx_exe_image_size;
+    int PC = hdr_size;
+
+    std::ifstream file_patch(path, std::ios::binary);
+    if (!file_patch.good())
+        return false;
+
+    while (PC + 2 < end) {
+        decoded_insn_t insn;
+        if (!decode_insn(file_patch, PC, end, insn))
+            break;
+
+        if (insn.opcode == OP_BSL && insn.arg_type == OP_ARG_LFR) {
+            uint16_t arg2 = (insn.arg >> 16) & 0xFFFF;
+            auto iter = ps2_pc_global_slc_funcremap.find(arg2);
+            if (iter != ps2_pc_global_slc_funcremap.end()) {
+                uint16_t new_idx = arg2 + iter->second;
+                int new_arg = (insn.arg & 0xFFFF) | (new_idx << 16);
+                memcpy(&buffer[(insn.offset - 4) + (insn.size - 4)], &new_arg, 4);
+                printf("%x %x %x type: %x \t0x%X\n", insn.opcode , new_arg, arg2, insn.arg_type, insn.offset);
+            }
+        }
+
+        PC += insn.size;
+    }
+
+    file_patch.close();
+    out_f.write(buffer.data(), buffer.size());
+    out_f.close();
     return true;
 }
 
